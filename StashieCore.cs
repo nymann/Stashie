@@ -29,6 +29,7 @@ using Stashie.Filters;
 using Stashie.Settings;
 using Stashie.Utils;
 using MenuItem = PoeHUD.Hud.Menu.MenuItem;
+using System.Reflection;
 
 namespace Stashie
 {
@@ -53,6 +54,10 @@ namespace Stashie
 
         private List<CustomFilter> _customFilters;
         private List<RefillProcessor> _customRefills;
+
+        private object FRSM_Instance;
+        private event Action FRSM_UpdateStashesEvent = delegate { };
+        private event Action FRSM_UpdateItemsSetsInfoEvent = delegate { };
 
         public override void Initialise()
         {
@@ -400,9 +405,12 @@ namespace Stashie
                             Settings.ExtraDelay);
                         Thread.Sleep(latency);
                     }
+
+                    FRSM_UpdateStashesEvent();
                 }
 
                 Keyboard.KeyUp(Keys.LControlKey);
+                FRSM_UpdateItemsSetsInfoEvent();
             }
 
             ProcessRefills();
@@ -885,13 +893,54 @@ namespace Stashie
             foreach (var lOption in _settingsListNodes)
             {
                 var option = lOption; //Enumerator delegate fix
-                option.OnValueSelected += delegate(string newValue) { OnSettingsStashNameChanged(option, newValue); };
+                option.OnValueSelected += delegate (string newValue) { OnSettingsStashNameChanged(option, newValue); };
             }
 
             LoadIgnoredCells();
 
             _tabNamesUpdaterThread = new Thread(StashTabNamesUpdater_Thread);
             _tabNamesUpdaterThread.Start();
+
+            foreach (var plugin in PoeHUD.Hud.PluginExtension.PluginExtensionPlugin.Plugins)
+            {
+                var pluginType = plugin.GetType();
+                if (pluginType.Name == "FullRareSetManager")
+                {
+                    FRSM_Instance = plugin;
+                    var FRSM_UpdateStashesMInfo = pluginType.GetMethod("UpdateStashes", BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
+                    var FRSM_UpdateItemsSetsInfoMInfo = pluginType.GetMethod("UpdateItemsSetsInfo", BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
+
+                    if (FRSM_UpdateStashesMInfo != null)
+                        FRSM_UpdateStashesEvent = delegate
+                        {
+                            try
+                            {
+                                Thread.Sleep(200);//Sometimes it miss the last item after drop->UpdateStashes
+                                FRSM_UpdateStashesMInfo.Invoke(FRSM_Instance, new object[0]);
+                            }
+                            catch (Exception ex)
+                            {
+                                LogError("Error while invoking RareSetManager->UpdateStashes: " + ex.Message, 5);
+                            }
+                        };
+
+                    if (FRSM_UpdateItemsSetsInfoMInfo != null)
+                        FRSM_UpdateItemsSetsInfoEvent = delegate
+                        {
+                            try
+                            {
+                                //Thread.Sleep(200);    //Not sure here should be any delay, should work without it
+                                FRSM_UpdateItemsSetsInfoMInfo.Invoke(FRSM_Instance, new object[0]);
+                            }
+                            catch (Exception ex)
+                            {
+                                LogError("Error while invoking RareSetManager->UpdateItemsSetsInfo: " + ex.Message, 5);
+                            }
+                        };
+
+                    break;
+                }
+            }
         }
 
         private int GetInventIndexByStashName(string name)
