@@ -158,16 +158,19 @@ namespace Stashie
                 "/////////////////////////////////////////////////////////////\r\n" +
                 "\r\n" +
                 "//Default Tabs\r\n" +
+                "Currency:\t\t\tClassName=StackableCurrency,path!^Essence,path!^Fossil,BaseName!^Splinter of\t\t\t\t:Default Tabs\r\n" +
                 "Divination Cards:\tClassName=DivinationCard\t\t\t\t\t\t\t\t\t\t:Default Tabs\r\n" +
-                "Vaal Gems:\t\t\tClassName^Skill Gem,corrupted\t\t\t\t\t\t\t\t\t:Default Tabs\r\n" +
-                "Gems:\t\t\t\tClassName^Skill Gem,ItemQuality=0\t\t\t\t\t\t\t\t:Default Tabs\r\n" +
-                "Splinters:\t\t\tBaseName^Splinter of,ClassName=StackableCurrency\t\t\t\t:Default Tabs\r\n" +
-                "Currency:\t\t\tClassName=StackableCurrency,path!^Essence\t\t\t\t\t\t:Default Tabs\r\n" +
-                "Abyss Jewels:\t\tClassName=AbyssJewel\t\t\t\t\t\t\t\t\t\t\t:Default Tabs\r\n" +
                 "Essences:\t\t\tBaseName^Essence,ClassName=StackableCurrency\t\t\t\t\t:Default Tabs\r\n" +
+                "Splinters:\t\t\tBaseName^Splinter of,ClassName=StackableCurrency\t\t\t\t:Default Tabs\r\n" +
+                "Gems:\t\t\t\tClassName^Skill Gem,ItemQuality=0\t\t\t\t\t\t\t\t:Default Tabs\r\n" +
+                "Vaal Gems:\t\t\tClassName^Skill Gem,corrupted\t\t\t\t\t\t\t\t\t:Default Tabs\r\n" +
+                "Abyss Jewels:\t\tClassName=AbyssJewel\t\t\t\t\t\t\t\t\t\t\t:Default Tabs\r\n" +
                 "Jewels:\t\t\t\tClassName=Jewel\t\t\t\t\t\t\t\t\t\t\t\t\t:Default Tabs\r\n" +
                 "Flasks:\t\t\t\tClassName^Flask,ItemQuality=0\t\t\t\t\t\t\t\t\t:Default Tabs\r\n" +
                 "\r\n" +
+                "//Delve Items\r\n" +
+                "Fossils:\t\t\tBaseName^Fossil\t\t\t\t\t\t:Delve Items\r\n" +
+                "Resonators:\t\tBaseName^Resonator\t\t\t\t\t:Delve Items\r\n" +
                 "\r\n" +
                 "//Chance Items\r\n" +
                 "Sorcerer Boots:\tBaseName=Sorcerer Boots,Rarity=Normal\t:Chance Items\r\n" +
@@ -177,7 +180,8 @@ namespace Stashie
                 "Chisel Recipe:\t\tBaseName=Stone Hammer|BaseName=Rock Breaker,ItemQuality=20\t:Vendor Recipes\r\n" +
                 "Quality Gems:\t\tClassName^Skill Gem,ItemQuality>0\t\t\t\t\t\t\t:Vendor Recipes\r\n" +
                 "Quality Flasks:\t\tClassName^Flask,ItemQuality>0\t\t\t\t\t\t\t\t:Vendor Recipes\r\n" +
-                "\r\n//Chaos Recipe LVL 2 (unindentified and ilvl 60 or above)\r\n" +
+                "\r\n" +
+                "//Chaos Recipe LVL 2 (unindentified and ilvl 60 or above)\r\n" +
                 "CR-Weapons:\t\t\t!identified,Rarity=Rare,ilvl>=60,ClassName^Two Hand|ClassName^One Hand|ClassName=Bow|ClassName=Staff|ClassName=Sceptre|ClassName=Wand|ClassName=Dagger|ClassName=Claw|ClassName=Shield|ClassName=Quiver :Chaos Recipe\r\n" +
                 "CR-Amulets:\t\t\t!identified,Rarity=Rare,ilvl>=60,ClassName=Amulet \t\t\t\t:Chaos Recipe\r\n" +
                 "CR-Rings:\t\t\t!identified,Rarity=Rare,ilvl>=60,ClassName=Ring \t\t\t\t:Chaos Recipe\r\n" +
