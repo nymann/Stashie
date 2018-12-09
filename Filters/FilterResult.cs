@@ -1,6 +1,5 @@
-﻿using SharpDX;
-using Stashie.Settings;
-using PoeHUD.Hud.Settings;
+﻿using PoeHUD.Hud.Settings;
+using SharpDX;
 
 namespace Stashie.Filters
 {
