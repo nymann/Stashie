@@ -940,7 +940,7 @@ namespace Stashie
                 if (stashPanel.IsVisible && !viewAllTabsButton.IsVisible)
                     return SwitchToTabViaArrowKeys(tabNode);
 
-                var dropdownMenu = _ingameState.ServerData.StashPanel.ViewAllStashPanel;
+                var dropdownMenu = GameController.Game.IngameState.ServerData.StashPanel.ViewAllStashPanel;
 
                 if (!dropdownMenu.IsVisible)
                 {
@@ -950,7 +950,7 @@ namespace Stashie
                     var brCounter = 0;
 
                     // wait for the dropdown menu to become visible.
-                    while (!dropdownMenu.IsVisible)
+                    while (1 == 2 && !dropdownMenu.IsVisible)
                     {
                         Thread.Sleep(WHILE_DELAY);
 
@@ -961,12 +961,10 @@ namespace Stashie
                     }
 
                     // Make sure that we are scrolled to the top in the menu.
-                    if (_ingameState.ServerData.StashPanel.TotalStashes > 30)
+                    if (GameController.Game.IngameState.ServerData.StashPanel.TotalStashes > 30)
                     {
-                        Thread.Sleep(WHILE_DELAY);
-                        Mouse.VerticalScroll(true, 10);
-                        Thread.Sleep(WHILE_DELAY);
-                        Mouse.VerticalScroll(true, 10);
+                        Mouse.VerticalScroll(true, 5);
+                        Thread.Sleep(latency + Settings.ExtraDelay);
                     }
                 }
 
@@ -975,9 +973,9 @@ namespace Stashie
                 // 0 is the icon (fx. chaos orb).
                 // 1 is the name of the tab.
                 // 2 is the slider.
-                var slider = dropdownMenu.Children[1].ChildCount == _ingameState.ServerData.StashPanel.TotalStashes;
-
-                var noSlider = dropdownMenu.Children[2].ChildCount == _ingameState.ServerData.StashPanel.TotalStashes;
+                var totalStashes = GameController.Game.IngameState.ServerData.StashPanel.TotalStashes;
+                var slider = dropdownMenu.Children[1].ChildCount == totalStashes;
+                var noSlider = dropdownMenu.Children[2].ChildCount == totalStashes;
                 RectangleF tabPos;
                 if (slider)
                 {
@@ -995,7 +993,7 @@ namespace Stashie
                 }
 
                 Mouse.SetCursorPosAndLeftClick(tabPos.Center, Settings.ExtraDelay, _windowOffset);
-                Thread.Sleep(latency);
+                Thread.Sleep(latency + Settings.ExtraDelay);
             }
             catch (Exception e)
             {
@@ -1013,8 +1011,10 @@ namespace Stashie
                 stash = stashPanel.VisibleStash;
 
                 if (counter++ <= maxNumberOfTries)
+                {
                     continue;
-                LogMessage(
+                }   
+                BasePlugin.LogMessage(
                     $"2. Error opening stash : {tabNode.Name}. Inventory type is: {stash.InvType.ToString()}",
                     5);
                 return false;

@@ -35,31 +35,31 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="ImGui.NET">
-      <HintPath>..\ll\Release\ImGui.NET.dll</HintPath>
+      <HintPath>..\..\PoEHUD\Release\ImGui.NET.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="Newtonsoft.Json">
-      <HintPath>..\ll\Release\Newtonsoft.Json.dll</HintPath>
+      <HintPath>..\..\PoEHUD\Release\Newtonsoft.Json.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="PoeHUD">
-      <HintPath>..\ll\Release\PoeHUD.exe</HintPath>
+      <HintPath>..\..\PoEHUD\Release\PoeHUD.exe</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="SharpDX">
-      <HintPath>..\ll\Release\SharpDX.dll</HintPath>
+      <HintPath>..\..\PoEHUD\Release\SharpDX.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="SharpDX.Desktop">
-      <HintPath>..\ll\Release\SharpDX.Desktop.dll</HintPath>
+      <HintPath>..\..\PoEHUD\Release\SharpDX.Desktop.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="SharpDX.Direct3D9">
-      <HintPath>..\ll\Release\SharpDX.Direct3D9.dll</HintPath>
+      <HintPath>..\..\PoEHUD\Release\SharpDX.Direct3D9.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="SharpDX.Mathematics">
-      <HintPath>..\ll\Release\SharpDX.Mathematics.dll</HintPath>
+      <HintPath>..\..\PoEHUD\Release\SharpDX.Mathematics.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="System" />
