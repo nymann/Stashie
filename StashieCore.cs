@@ -43,7 +43,6 @@ namespace Stashie
         private IngameState _ingameState;
         private bool _playerHasDropdownMenu;
         private Random _random;
-        private bool _dumpToStash = true;
 
         public StashieCore()
         {
@@ -241,7 +240,7 @@ namespace Stashie
          * True - drops items to stash constrained by Filter rules.
          * False - ignores filter rules.  Instead, inventory items will be collated and dropped in the open window.
          */
-        private void ProcessInventoryItems(bool dropToStash)
+        private void ProcessInventoryItems()
         {
             var inventory =
                 _ingameState.IngameUi.InventoryPanel[
@@ -275,19 +274,12 @@ namespace Stashie
                     continue;
 
                 var baseItemType = GameController.Files.BaseItemTypes.Translate(invItem.Item.Path);
-                if (dropToStash)
-                {
-                    var testItem = new ItemData(invItem, baseItemType);
+                var testItem = new ItemData(invItem, baseItemType);
 
-                    var result = CheckFilters(testItem);
+                var result = CheckFilters(testItem);
 
-                    if (result != null)
-                        _dropItems.Add(result);
-                }
-                else
-                {
-                    _dropItems.Add(new FilterResult(new StashTabNode(), new ItemData(invItem, baseItemType)));
-                }
+                if (result != null)
+                    _dropItems.Add(result);
             }
         }
         private bool CheckIgnoreCells(NormalInventoryItem inventItem)
@@ -320,6 +312,52 @@ namespace Stashie
             }
 
             return null;
+        }
+        public void DumpToOpenWindow(Inventory inv, Func<bool> IsValidState)
+        {
+            //var inventory = _ingameState.IngameUi.InventoryPanel[InventoryIndex.PlayerInventory];
+            _windowOffset = GameController.Window.GetWindowRectangle().TopLeft;
+
+            foreach (var invItem in inv.VisibleInventoryItems)
+            {
+                int count = 0;
+                do
+                {
+                    // Wait for the shift key to be lifted as it can cause problems if held down
+                    Thread.Sleep(10);
+                } while (Keyboard.IsKeyPressed(Keys.LShiftKey) && count++ < 200 && IsValidState());
+
+                if (!IsValidState())
+                {
+                    return;
+                }
+
+                if (string.IsNullOrEmpty(invItem.Item?.Path))
+                {
+                    LogError(
+                        $"Bugged item detected on X:{invItem.InventPosX}, Y:{invItem.InventPosY}, skipping.. Change location to fix this or restart the game (exit to character selection).",
+                        5);
+                    continue;
+                }
+
+                if (CheckIgnoreCells(invItem))
+                    continue;
+
+                Keyboard.KeyDown(Keys.LControlKey);
+                try
+                {
+                    Thread.Sleep(GetLatency(true) + Settings.ExtraDelay.Value);
+                    Mouse.SetCursorPosAndLeftClick(invItem.GetClientRect().Center, Settings.ExtraDelay, _windowOffset);
+                }
+                catch (Exception e)
+                {
+                    LogError($"{e}. Could not move the item {invItem.ToString()}", 1);
+                }
+                finally
+                {
+                    Keyboard.KeyUp(Keys.LControlKey);
+                }
+            }
         }
 
         private void DumpToWindow(Func<bool> validState)
@@ -369,6 +407,11 @@ namespace Stashie
 
                 foreach (var stashResults in itemsToDrop)
                 {
+                    if (!validState())
+                    {
+                        return;
+                    }
+
                     if (!SwitchToTab(stashResults.Value[0].StashNode, validState))
                         continue;
                     Keyboard.KeyDown(Keys.LControlKey);
@@ -462,9 +505,17 @@ namespace Stashie
                         {
                             // skip
                         }
+                        else if(Keyboard.IsKeyToggled(Settings.DropHotkey.Value) && Keyboard.IsKeyToggled(Keys.LShiftKey))
+                        {
+                            //var inventory = _ingameState.IngameUi.InventoryPanel[InventoryIndex.PlayerInventory];
+                            if (GameController.Game.IngameState.UIRoot.Children?[1].Children?[74]?.IsVisible ?? false)
+                            {
+                                DumpToOpenWindow(_ingameState.IngameUi.InventoryPanel[InventoryIndex.PlayerInventory], inventoryOpen);
+                            }
+                        }
                         else
                         {
-                            ProcessInventoryItems(_ingameState.ServerData.StashPanel.IsVisible);
+                            ProcessInventoryItems();
 
                             if (_dropItems.Count == 0)
                             {
@@ -472,16 +523,7 @@ namespace Stashie
                             }
                             else
                             {
-                                if (stashOpen())
-                                {
-                                    DropToStash(() => inventoryOpen() && stashOpen());
-                                }
-                                else if (GameController.Game.IngameState.UIRoot.Children?[1].Children?[74]?.IsVisible ?? false )
-                                {
-                                    // A left panel window (NPC, player, etc...) other than the stash is open...
-                                    // just dump the items and ignore filter rules.
-                                    DumpToWindow(inventoryOpen);
-                                }
+                                DropToStash(() => inventoryOpen() && stashOpen());
                             }
                         }
                     }
