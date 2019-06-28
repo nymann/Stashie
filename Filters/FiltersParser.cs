@@ -40,6 +40,9 @@ namespace Stashie.Filters
 
         private const string PARAMETER_ISCORRUPTED = "corrupted";
 
+        private const string PARAMETER_ISVEILED = "veiled";
+
+        private const string PARAMETER_ISINCUBATOR = "incubator";
 
         //Operations
         private const string OPERATION_NONEQUALITY = "!=";
@@ -191,6 +194,20 @@ namespace Stashie.Filters
             {
                 var shaperCommand = new ShaperItemFiler {IsShaper = command[0] != SYMBOL_NOT};
                 newFilter.Filters.Add(shaperCommand);
+                return true;
+            }
+
+            if (command.Contains(PARAMETER_ISVEILED))
+            {
+                var veiledCommand = new VeiledItemFilter { IsVeiled = command[0] != SYMBOL_NOT };
+                newFilter.Filters.Add(veiledCommand);
+                return true;
+            }
+
+            if (command.Contains(PARAMETER_ISINCUBATOR))
+            {
+                var incubatorCommand = new IncubatorItemFilter { IsIncubator = command[0] != SYMBOL_NOT };
+                newFilter.Filters.Add(incubatorCommand);
                 return true;
             }
 
@@ -433,6 +450,24 @@ namespace Stashie.Filters
         public bool CompareItem(ItemData itemData)
         {
             return itemData.IsShaper == IsShaper;
+        }
+    }
+    public class VeiledItemFilter : IIFilter
+    {
+        public bool IsVeiled;
+
+        public bool CompareItem(ItemData itemData)
+        {
+            return itemData.VeiledMods?.Length > 0;
+        }
+    }
+
+    public class IncubatorItemFilter : IIFilter
+    {
+        public bool IsIncubator;
+        public bool CompareItem(ItemData itemData)
+        {
+            return itemData.IsIncubator == IsIncubator;
         }
     }
 

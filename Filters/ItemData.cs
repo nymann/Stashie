@@ -3,6 +3,7 @@ using PoeHUD.Models.Enums;
 using PoeHUD.Poe.Components;
 using PoeHUD.Poe.Elements;
 using SharpDX;
+using System.Linq;
 using Map = PoeHUD.Poe.Components.Map;
 
 namespace Stashie.Filters
@@ -23,9 +24,46 @@ namespace Stashie.Filters
         public int LargestLinkSize;
         public int ItemQuality;
         public int MapTier;
+        public bool IsIncubator;
 
         public string Path;
         public ItemRarity Rarity;
+        public class VeilMod
+        {
+            public enum VeiledAttributeTypes
+            {
+                IMPLICIT,
+                PREFIX,
+                SUFFIX,
+                UNKNOWN
+            }
+            private string InMemoryVeilId = "Veiled";
+            private string InMemoryPrefixId = "Prefix";
+            private string InMemorySuffixId = "Suffix";
+            private string RawName { get; set; } = null;
+            public VeiledAttributeTypes VeiledAttributeType { get; set; } = VeiledAttributeTypes.UNKNOWN;
+            public bool IsVeiled { get; set; }
+            public VeilMod(string rawName)
+            {
+                RawName = rawName;
+                Initialize();
+            }
+            private void Initialize()
+            {
+                if (VeiledAttributeType == VeiledAttributeTypes.UNKNOWN && RawName != null)
+                {
+                    // FIXME: create grammer
+                    var index = RawName.IndexOf(InMemoryVeilId);
+                    if (index >= 0)
+                    {
+                        IsVeiled = true;
+                        VeiledAttributeType = RawName.Substring(index)?.IndexOf(InMemorySuffixId) >= 0 ?
+                            VeiledAttributeTypes.SUFFIX : VeiledAttributeTypes.PREFIX;
+                    }
+                }
+            }
+        };
+        public VeilMod[] VeiledMods { get; set; }
 
         public ItemData(NormalInventoryItem inventoryItem, BaseItemType baseItemType)
         {
@@ -40,7 +78,7 @@ namespace Stashie.Filters
             Rarity = mods.ItemRarity;
             BIdentified = mods.Identified;
             ItemLevel = mods.ItemLevel;
-            
+
             var sockets = item.GetComponent<Sockets>();
             NumberOfSockets = sockets.NumberOfSockets;
             LargestLinkSize = sockets.LargestLinkSize;
@@ -49,6 +87,8 @@ namespace Stashie.Filters
             ItemQuality = quality.ItemQuality;
             ClassName = baseItemType.ClassName;
             BaseName = baseItemType.BaseName;
+            VeiledMods = mods.ItemMods.Select(itemMod => new VeilMod(itemMod.Name)).Where(veilMod => veilMod.IsVeiled).ToArray();
+            IsIncubator = Path.Contains("Incubation");
 
             if (@base.Name == "Prophecy")
             {

@@ -22,6 +22,7 @@ using System.Reflection;
 using System.Threading;
 using System.Windows.Forms;
 using SharpDX.Direct3D9;
+using System.Diagnostics;
 
 namespace Stashie
 {
@@ -37,9 +38,12 @@ namespace Stashie
         private Vector2 _windowOffset;
         private List<string> RefillCurrencyNames = new List<string>();
         private List<CustomFilter> _customFilters;
+        // Container for items that we either want to stash into specific tabs or simply drop into whatever window is open
         private List<FilterResult> _dropItems;
         private IngameState _ingameState;
         private bool _playerHasDropdownMenu;
+        private Random _random;
+        private bool _dumpToStash = true;
 
         public StashieCore()
         {
@@ -48,6 +52,7 @@ namespace Stashie
 
         public override void Initialise()
         {
+            _random = new Random(DateTime.Today.Millisecond);
             _callPluginEventMethod = typeof(PluginExtensionPlugin).GetMethod("CallPluginEvent");
             _ingameState = GameController.Game.IngameState;
 
@@ -231,7 +236,12 @@ namespace Stashie
             CreateFileAndAppendTextIfItDoesNotExitst(path, filtersConfig);
         }
 
-        private void ProcessInventoryItems()
+        /**
+         * Process inventory items with the given dropToStash directive.
+         * True - drops items to stash constrained by Filter rules.
+         * False - ignores filter rules.  Instead, inventory items will be collated and dropped in the open window.
+         */
+        private void ProcessInventoryItems(bool dropToStash)
         {
             var inventory =
                 _ingameState.IngameUi.InventoryPanel[
@@ -265,15 +275,21 @@ namespace Stashie
                     continue;
 
                 var baseItemType = GameController.Files.BaseItemTypes.Translate(invItem.Item.Path);
-                var testItem = new ItemData(invItem, baseItemType);
+                if (dropToStash)
+                {
+                    var testItem = new ItemData(invItem, baseItemType);
 
-                var result = CheckFilters(testItem);
+                    var result = CheckFilters(testItem);
 
-                if (result != null)
-                    _dropItems.Add(result);
+                    if (result != null)
+                        _dropItems.Add(result);
+                }
+                else
+                {
+                    _dropItems.Add(new FilterResult(new StashTabNode(), new ItemData(invItem, baseItemType)));
+                }
             }
         }
-
         private bool CheckIgnoreCells(NormalInventoryItem inventItem)
         {
             var inventPosX = inventItem.InventPosX;
@@ -306,10 +322,38 @@ namespace Stashie
             return null;
         }
 
-        private void DropToStash()
+        private void DumpToWindow(Func<bool> validState)
         {
-            var cursorPosPreMoving = Mouse.GetCursorPosition();
+            var items = _dropItems.Select(filter => filter.ClickPos);
+            Keyboard.KeyDown(Keys.LControlKey);
+            try
+            {
+                Thread.Sleep(GetLatency(true) + Settings.ExtraDelay.Value);
+                foreach (var vec in items)
+                {
+                    try
+                    {
+                        Mouse.SetCursorPosAndLeftClick(vec, Settings.ExtraDelay, _windowOffset);
+                        Thread.Sleep(GetLatency(true) + Settings.ExtraDelay.Value);
+                    }
+                    catch (Exception e)
+                    {
+                        LogError($"{e}. Could not move the item {vec.ToString()}", 1);
+                    }
+                }
+            }
+            catch (Exception vectorize)
+            {
+                LogError($"{vectorize} Failed to project player inventory to Vector positions", 2);
+            }
+            finally
+            {
+                Keyboard.KeyUp(Keys.LControlKey);
+            }
+        }
 
+        private void DropToStash(Func<bool> validState)
+        {
             if (Settings.BlockInput.Value)
                 WinApi.BlockInput(true);
 
@@ -317,40 +361,33 @@ namespace Stashie
             {
                 // Dictionary where key is the index (stashtab index) and Value is the items to drop.
                 var itemsToDrop = (from dropItem in _dropItems
-                    group dropItem by dropItem.StashNode.VisibleIndex
+                                   group dropItem by dropItem.StashNode.VisibleIndex
                     into itemsToDropByTab
-                    select itemsToDropByTab).ToDictionary(tab => tab.Key, tab => tab.ToList());
-
-                var latency = (int) _ingameState.CurLatency;
+                                   select itemsToDropByTab).ToDictionary(tab => tab.Key, tab => tab.ToList());
 
                 var stashPanel = IngameState.IngameUi.StashElement;
 
                 foreach (var stashResults in itemsToDrop)
                 {
-                    // If we are more than 2 tabs away from our target, then use dropdown approach if
-                    // user has it.
-                    if (!Keyboard.IsKeyToggled(Settings.DropHotkey.Value))
-                        return;
-
-                    if (!SwitchToTab(stashResults.Value[0].StashNode))
+                    if (!SwitchToTab(stashResults.Value[0].StashNode, validState))
                         continue;
+                    Keyboard.KeyDown(Keys.LControlKey);
                     try
                     {
-                        Keyboard.KeyDown(Keys.LControlKey);
-                        Thread.Sleep(INPUT_DELAY);
+                        Thread.Sleep(GetLatency(true) + Settings.ExtraDelay.Value);
 
                         foreach (var stashResult in stashResults.Value)
                         {
-                            Mouse.SetCursorPosAndLeftClick(stashResult.ClickPos, Settings.ExtraDelay, _windowOffset);
-                            Thread.Sleep(latency + Settings.ExtraDelay.Value);
-
                             if (!stashPanel.IsVisible)
                             {
                                 break;
                             }
+
+                            Mouse.SetCursorPosAndLeftClick(stashResult.ClickPos, Settings.ExtraDelay, _windowOffset);
+                            Thread.Sleep(GetLatency(true) + Settings.ExtraDelay.Value);
                         }
                     }
-                    catch
+                    finally
                     {
                         Keyboard.KeyUp(Keys.LControlKey);
                     }
@@ -370,12 +407,11 @@ namespace Stashie
                 Keyboard.KeyUp(Keys.LControlKey);
             }
 
-            ProcessRefills();
-            Mouse.SetCursorPos(cursorPosPreMoving.X, cursorPosPreMoving.Y);
+            ProcessRefills(validState);
 
             // TODO:Go back to a specific tab, if user has that setting enabled.
             if (Settings.VisitTabWhenDone.Value)
-                SwitchToTab(Settings.TabToVisitWhenDone);
+                SwitchToTab(Settings.TabToVisitWhenDone, validState, false);
 
             if (Settings.BlockInput.Value)
             {
@@ -384,62 +420,91 @@ namespace Stashie
             }
         }
 
+        /**
+         * Get current latency an add some entropy to help deter possible "correlation attacks" by GGG.
+         */
+        private int GetLatency(bool addRand) => addRand ? (int)_ingameState.CurLatency :
+            (int)_ingameState.CurLatency + _random.Next(((int)_ingameState.CurLatency)<<2);
+
         public override void Render()
         {
-            if (!Settings.Enable)
-                return;
-
-            var uiTabsOpened = _ingameState.IngameUi.InventoryPanel.IsVisible &&
-                               _ingameState.ServerData.StashPanel.IsVisible;
-
-            if (!uiTabsOpened)
+            try
             {
-                if (Keyboard.IsKeyToggled(Settings.DropHotkey.Value))
-                {
-                    LogWarning($"{Settings.DropHotkey.Value} key is toggled, disabling it.", 5);
-                    Keyboard.KeyPress(Settings.DropHotkey.Value);
-                }
+                if (!Settings.Enable)
+                    return;
 
-                return;
-            }
-
-            //Debug
-            /*var dropdownMenu = _ingameState.ServerData.StashPanel.ViewAllStashPanel;
-            if (dropdownMenu.IsVisible)
-            {
-                for (var index = 0; index < dropdownMenu.Children.Count; index++)
+                var cursorPosPreMoving = Mouse.GetCursorPosition();
+                try
                 {
-                    var dropdown = dropdownMenu.Children[index];
-                    for (var i = 0; i < dropdown.Children.Count; i++)
+                    Func<bool> inventoryOpen = () => { return _ingameState.IngameUi.InventoryPanel.IsVisible; };
+                    Func<bool> stashOpen = () => { return _ingameState.ServerData.StashPanel.IsVisible; };
+
+                    if (inventoryOpen())
                     {
-                        var child = dropdown.Children[i];
-                        Graphics.DrawBox(child.GetClientRect(), Color.DarkRed);
-                        var pos2 = new Vector2(child.GetClientRect().Center.X, child.GetClientRect().Top);
-                        Graphics.DrawText($"[{index}][{i}]", 20, pos2, Color.White, FontDrawFlags.Center);
+#if DEBUG_DEEP
+                            var dropdownMenu = _ingameState.ServerData.StashPanel.ViewAllStashPanel;
+                            if (dropdownMenu.IsVisible)
+                            {
+                                for (var index = 0; index < dropdownMenu.Children.Count; index++)
+                                {
+                                    var dropdown = dropdownMenu.Children[index];
+                                    for (var i = 0; i < dropdown.Children.Count; i++)
+                                    {
+                                        var child = dropdown.Children[i];
+                                        Graphics.DrawBox(child.GetClientRect(), Color.DarkRed);
+                                        var pos2 = new Vector2(child.GetClientRect().Center.X, child.GetClientRect().Top);
+                                        Graphics.DrawText($"[{index}][{i}]", 20, pos2, Color.White, FontDrawFlags.Center);
+                                    }
+                                }
+                            }
+#endif
+                        if (!Keyboard.IsKeyToggled(Settings.DropHotkey.Value) && Settings.RequireHotkey == true)
+                        {
+                            // skip
+                        }
+                        else
+                        {
+                            ProcessInventoryItems(_ingameState.ServerData.StashPanel.IsVisible);
+
+                            if (_dropItems.Count == 0)
+                            {
+                                ProcessRefills(() => inventoryOpen() && stashOpen());
+                            }
+                            else
+                            {
+                                if (stashOpen())
+                                {
+                                    DropToStash(() => inventoryOpen() && stashOpen());
+                                }
+                                else if (GameController.Game.IngameState.UIRoot.Children?[1].Children?[74]?.IsVisible ?? false )
+                                {
+                                    // A left panel window (NPC, player, etc...) other than the stash is open...
+                                    // just dump the items and ignore filter rules.
+                                    DumpToWindow(inventoryOpen);
+                                }
+                            }
+                        }
                     }
                 }
-            }*/
-
-            if (!Keyboard.IsKeyToggled(Settings.DropHotkey.Value) && Settings.RequireHotkey == true)
-            {
-                return;
+                finally
+                {
+                    Mouse.SetCursorPos(cursorPosPreMoving.X, cursorPosPreMoving.Y);
+                    if (Keyboard.IsKeyToggled(Settings.DropHotkey.Value))
+                    {
+                        // This effectively "swallows" the configured hotkey making exclusive use of it...is that ok?  Should we just allow
+                        // the key to pass in order to allow other plugins to use the key? ie use the hotkey when iventory isn't open?
+                        LogWarning($"{Settings.DropHotkey.Value} key is toggled, disabling it.", 5);
+                        Keyboard.KeyPress(Settings.DropHotkey.Value);
+                    }
+                }
             }
-
-            ProcessInventoryItems();
-
-            if (_dropItems.Count == 0)
+            catch(Exception catchAll)
             {
-                ProcessRefills();
-                Keyboard.KeyPress(Settings.DropHotkey.Value);
-                return;
+                LogError($"{catchAll} general failure in Render.", 5);
             }
-
-            DropToStash();
-
-            Keyboard.KeyPress(Settings.DropHotkey.Value);
         }
 
-        #region Loads
+#region Loads
 
         public override void InitializeSettingsMenu()
         {
@@ -638,11 +703,11 @@ namespace Stashie
             };
         }
 
-        #endregion Loads
+#endregion Loads
 
-        #region Refill
+#region Refill
 
-        private void ProcessRefills()
+        private void ProcessRefills(Func<bool> validState)
         {
             if (!Settings.RefillCurrency.Value || Settings.Refills.Count == 0)
                 return;
@@ -726,11 +791,10 @@ namespace Stashie
 
                 if (refill.OwnedCount < refill.Amount.Value)
                 {
-                    #region Refill
-
+#region Refill
                     if (!currencyTabVisible)
                     {
-                        if (!SwitchToTab(Settings.CurrencyStashTab))
+                        if (!SwitchToTab(Settings.CurrencyStashTab, validState))
                             continue;
                         currencyTabVisible = true;
                         Thread.Sleep(delay);
@@ -740,8 +804,8 @@ namespace Stashie
 
                     var currStashItems = _ingameState.ServerData.StashPanel.VisibleStash
                         .VisibleInventoryItems;
-                    var foundSourceOfRefill = currStashItems
-                        .Where(x => GameController.Files.BaseItemTypes.Translate(x.Item.Path).BaseName ==
+                    var foundSourceOfRefill = currStashItems?
+                        .Where(x => GameController?.Files?.BaseItemTypes?.Translate(x?.Item?.Path).BaseName ==
                                     refill.CurrencyClass).ToList();
 
                     foreach (var sourceOfRefill in foundSourceOfRefill)
@@ -798,11 +862,11 @@ namespace Stashie
                             $"Not enough currency (need {moveCount} more) to fill {refill.CurrencyClass.Value} stack",
                             5);
 
-                    #endregion Refill
+#endregion Refill
                 }
                 else if (!Settings.AllowHaveMore.Value && refill.OwnedCount > refill.Amount.Value)
                 {
-                    #region Remove excess items
+#region Remove excess items
 
                     if (!freeCellFound)
                     {
@@ -812,7 +876,7 @@ namespace Stashie
 
                     if (!currencyTabVisible)
                     {
-                        if (!SwitchToTab(Settings.CurrencyStashTab))
+                        if (!SwitchToTab(Settings.CurrencyStashTab, validState))
                             continue;
                         currencyTabVisible = true;
                         Thread.Sleep(delay);
@@ -832,7 +896,7 @@ namespace Stashie
 
                     Thread.Sleep(delay);
 
-                    #endregion Remove excess items
+#endregion Remove excess items
                 }
             }
         }
@@ -931,11 +995,11 @@ namespace Stashie
             }
         }
 
-        #endregion Refill
+#endregion Refill
 
-        #region Switching between StashTabs
+#region Switching between StashTabs
 
-        public bool SwitchToTabViaDropdownMenu(StashTabNode tabNode)
+        public bool SwitchToTabViaDropdownMenu(StashTabNode tabNode, Func<bool> validState)
         {
             var latency = (int) _ingameState.CurLatency;
             var stashPanel = _ingameState.ServerData.StashPanel;
@@ -947,11 +1011,12 @@ namespace Stashie
                 var viewAllTabsButton = _ingameState.ServerData.StashPanel.ViewAllStashButton;
 
                 if (stashPanel.IsVisible && !viewAllTabsButton.IsVisible)
-                    return SwitchToTabViaArrowKeys(tabNode);
-
+                    return SwitchToTabViaArrowKeys(tabNode, validState);
                 var dropdownMenu = _ingameState.ServerData.StashPanel.ViewAllStashPanel;
 
-                if (!dropdownMenu.IsVisible)
+                Func<bool> dropDownMenuVisible = () => { return dropdownMenu.IsVisible && dropdownMenu.isHighlighted; } ;
+
+                if (!dropDownMenuVisible())
                 {
                     var pos = viewAllTabsButton.GetClientRect();
                     Mouse.SetCursorPosAndLeftClick(pos.Center, Settings.ExtraDelay, _windowOffset);
@@ -959,9 +1024,9 @@ namespace Stashie
                     // Make sure that we are scrolled to the top in the menu.
                     if (_ingameState.ServerData.StashPanel.TotalStashes > 30)
                     {
-                        Thread.Sleep(WHILE_DELAY);
+                        Thread.Sleep(latency);
                         Mouse.VerticalScroll(true, 10);
-                        Thread.Sleep(WHILE_DELAY);
+                        Thread.Sleep(latency);
                         Mouse.VerticalScroll(true, 10);
                     }
                 }
@@ -992,67 +1057,63 @@ namespace Stashie
 
                 Mouse.SetCursorPosAndLeftClick(tabPos.Center, Settings.ExtraDelay, _windowOffset);
                 Thread.Sleep(latency);
+                return stashPanel.IndexVisibleStash == tabNode.VisibleIndex;
             }
             catch (Exception e)
             {
                 LogError($"Error in GoToTab {tabNode.Name}: {e.Message}", 5);
                 return false;
             }
-
-            Inventory stash;
-
-            var counter = 0;
-
-            do
-            {
-                Thread.Sleep(WHILE_DELAY);
-                stash = stashPanel.VisibleStash;
-
-                if (counter++ <= maxNumberOfTries)
-                    continue;
-                LogMessage(
-                    $"2. Error opening stash : {tabNode.Name}. Inventory type is: {stash.InvType.ToString()}",
-                    5);
-                return false;
-            } while (stash?.VisibleInventoryItems == null);
-
-            return true;
         }
 
-        public bool SwitchToTab(StashTabNode tabNode)
+        public bool SwitchToTab(StashTabNode tabNode, Func<bool> validState, bool waitForTabToBeReady = true)
         {
             var stashPanel = _ingameState.ServerData.StashPanel;
+            //var lastIndex = stashPanel.IndexVisibleStash;
+            bool returnValue = true;
+            var sw = Stopwatch.StartNew();
+            Func<bool> failSafe = () =>  sw.ElapsedMilliseconds < 3000 && validState(); // sw.ElapsedMilliseconds < 1500 &&
 
-            // We don't want to Switch to a tab that we are already on
-            if (stashPanel.IndexVisibleStash == tabNode.VisibleIndex)
-                return true;
-
-            if (!_playerHasDropdownMenu)
-                return SwitchToTabViaArrowKeys(tabNode);
-
-            var indexOfVisibleStash = stashPanel.IndexVisibleStash;
-            var travelDistance = Math.Abs(tabNode.VisibleIndex - indexOfVisibleStash);
-
-            if (tabNode.VisibleIndex > 30 && indexOfVisibleStash < 30)
+            while (stashPanel.IndexVisibleStash != tabNode.VisibleIndex && failSafe())
             {
-                SwitchToTab(new StashTabNode {VisibleIndex = 30});
-                return SwitchToTabViaArrowKeys(tabNode);
+                if (!_playerHasDropdownMenu)
+                    returnValue = SwitchToTabViaArrowKeys(tabNode, validState);
+                else
+                {
+                    var indexOfVisibleStash = stashPanel.IndexVisibleStash;
+                    var travelDistance = Math.Abs(tabNode.VisibleIndex - indexOfVisibleStash);
+
+                    if (tabNode.VisibleIndex > 30 && indexOfVisibleStash < 30)
+                    {
+                        SwitchToTab(new StashTabNode { VisibleIndex = 30 }, validState);
+                        returnValue = SwitchToTabViaArrowKeys(tabNode, validState);
+                    }
+                    else
+                    {
+                        if (travelDistance > 6)
+                            returnValue = SwitchToTabViaDropdownMenu(tabNode, validState);
+                        else
+                            returnValue = SwitchToTabViaArrowKeys(tabNode, validState);
+                    }
+                }
             }
-
-            if (travelDistance > 3)
-                return SwitchToTabViaDropdownMenu(tabNode);
-
-            return SwitchToTabViaArrowKeys(tabNode);
+            if (returnValue && waitForTabToBeReady)
+            {
+                // need to do this to make sure tab is able to accept drop items, etc...
+                // there is discernable lag with certain tabs like map and divination tabs (when man items are present)
+                WaitUntil(() => { return stashPanel?.VisibleStash?.VisibleInventoryItems != null; });
+            }
+            return returnValue;
         }
 
-        private bool SwitchToTabViaArrowKeys(StashTabNode tabNode)
+        private bool SwitchToTabViaArrowKeys(StashTabNode tabNode, Func<bool> validState)
         {
             var latency = (int) _ingameState.CurLatency;
             var indexOfCurrentVisibleTab = _ingameState.ServerData.StashPanel.IndexVisibleStash;
             var difference = tabNode.VisibleIndex - indexOfCurrentVisibleTab;
             var tabIsToTheLeft = difference < 0;
 
-            for (var i = 0; i < Math.Abs(difference); i++)
+            for (var i = 0; i < Math.Abs(difference) && validState(); i++)
             {
                 Keyboard.KeyPress(tabIsToTheLeft ? Keys.Left : Keys.Right);
                 Thread.Sleep(latency);
@@ -1062,6 +1123,18 @@ namespace Stashie
         }
 
         #endregion Switching between StashTabs
+        private bool WaitUntil(Func<bool> IsDone, int maxMilliSecsToWait = 500)
+        {
+            var stopWatch = Stopwatch.StartNew();
+            do
+            {
+                if (stopWatch.ElapsedMilliseconds > maxMilliSecsToWait)
+                {
+                    return false;
+                }
+            } while (!IsDone());
+            return true;
+        }
 
         public override void OnPluginDestroyForHotReload()
         {

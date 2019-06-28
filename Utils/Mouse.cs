@@ -90,7 +90,7 @@ namespace Stashie.Utils
             SetCursorPos(posX, posY);
             Thread.Sleep(MOVEMENT_DELAY + extraDelay);
             mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0);
-            Thread.Sleep(CLICK_DELAY);
+            Thread.Sleep(CLICK_DELAY + extraDelay);
             mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0);
             Thread.Sleep(CLICK_DELAY + extraDelay);
         }
