@@ -320,13 +320,7 @@ namespace Stashie
 
             foreach (var invItem in inv.VisibleInventoryItems)
             {
-                int count = 0;
-                do
-                {
-                    // Wait for the shift key to be lifted as it can cause problems if held down
-                    Thread.Sleep(10);
-                } while (Keyboard.IsKeyPressed(Keys.LShiftKey) && count++ < 200 && IsValidState());
-
+                WaitUntil(() => { return !Keyboard.IsKeyPressed(Keys.LShiftKey); }, 2000);
                 if (!IsValidState())
                 {
                     return;
@@ -395,71 +389,75 @@ namespace Stashie
             if (Settings.BlockInput.Value)
                 WinApi.BlockInput(true);
 
-            if (_dropItems.Count > 0)
+            try
             {
-                // Dictionary where key is the index (stashtab index) and Value is the items to drop.
-                var itemsToDrop = (from dropItem in _dropItems
-                                   group dropItem by dropItem.StashNode.VisibleIndex
-                    into itemsToDropByTab
-                                   select itemsToDropByTab).ToDictionary(tab => tab.Key, tab => tab.ToList());
-
-                var stashPanel = IngameState.IngameUi.StashElement;
-
-                foreach (var stashResults in itemsToDrop)
+                if (_dropItems.Count > 0)
                 {
-                    if (!validState())
-                    {
-                        return;
-                    }
+                    // Dictionary where key is the index (stashtab index) and Value is the items to drop.
+                    var itemsToDrop = (from dropItem in _dropItems
+                                       group dropItem by dropItem.StashNode.VisibleIndex
+                        into itemsToDropByTab
+                                       select itemsToDropByTab).ToDictionary(tab => tab.Key, tab => tab.ToList());
 
-                    if (!SwitchToTab(stashResults.Value[0].StashNode, validState))
-                        continue;
-                    Keyboard.KeyDown(Keys.LControlKey);
-                    try
-                    {
-                        Thread.Sleep(GetLatency(true) + Settings.ExtraDelay.Value);
+                    var stashPanel = IngameState.IngameUi.StashElement;
 
-                        foreach (var stashResult in stashResults.Value)
+                    foreach (var stashResults in itemsToDrop)
+                    {
+                        if (!validState())
                         {
-                            if (!stashPanel.IsVisible)
-                            {
-                                break;
-                            }
+                            return;
+                        }
 
-                            Mouse.SetCursorPosAndLeftClick(stashResult.ClickPos, Settings.ExtraDelay, _windowOffset);
+                        if (!SwitchToTab(stashResults.Value[0].StashNode, validState))
+                            continue;
+                        Keyboard.KeyDown(Keys.LControlKey);
+                        try
+                        {
                             Thread.Sleep(GetLatency(true) + Settings.ExtraDelay.Value);
+
+                            foreach (var stashResult in stashResults.Value)
+                            {
+                                if (!stashPanel.IsVisible)
+                                {
+                                    break;
+                                }
+
+                                Mouse.SetCursorPosAndLeftClick(stashResult.ClickPos, Settings.ExtraDelay, _windowOffset);
+                                Thread.Sleep(GetLatency(true) + Settings.ExtraDelay.Value);
+                            }
+                        }
+                        finally
+                        {
+                            Keyboard.KeyUp(Keys.LControlKey);
+                        }
+
+                        if (!stashPanel.IsVisible)
+                        {
+                            break;
+                        }
+
+                        // QVIN's version of Hud doesn't support Subscription events, so we use reflection.
+                        if (_callPluginEventMethod != null)
+                        {
+                            _callPluginEventMethod.Invoke(API, new object[] { "StashUpdate", new object[0] });
                         }
                     }
-                    finally
-                    {
-                        Keyboard.KeyUp(Keys.LControlKey);
-                    }
 
-                    if (!stashPanel.IsVisible)
-                    {
-                        break;
-                    }
-
-                    // QVIN's version of Hud doesn't support Subscription events, so we use reflection.
-                    if (_callPluginEventMethod != null)
-                    {
-                        _callPluginEventMethod.Invoke(API, new object[] {"StashUpdate", new object[0]});
-                    }
+                    Keyboard.KeyUp(Keys.LControlKey);
                 }
+                ProcessRefills(validState);
 
-                Keyboard.KeyUp(Keys.LControlKey);
+                // TODO:Go back to a specific tab, if user has that setting enabled.
+                if (Settings.VisitTabWhenDone.Value)
+                    SwitchToTab(Settings.TabToVisitWhenDone, validState, false);
             }
-
-            ProcessRefills(validState);
-
-            // TODO:Go back to a specific tab, if user has that setting enabled.
-            if (Settings.VisitTabWhenDone.Value)
-                SwitchToTab(Settings.TabToVisitWhenDone, validState, false);
-
-            if (Settings.BlockInput.Value)
+            finally
             {
-                WinApi.BlockInput(false);
-                Thread.Sleep(INPUT_DELAY);
+                if (Settings.BlockInput.Value)
+                {
+                    WinApi.BlockInput(false);
+                    Thread.Sleep(INPUT_DELAY);
+                }
             }
         }
 
@@ -505,12 +503,17 @@ namespace Stashie
                         {
                             // skip
                         }
-                        else if(Keyboard.IsKeyToggled(Settings.DropHotkey.Value) && Keyboard.IsKeyToggled(Keys.LShiftKey))
+                        else if(Keyboard.IsKeyToggled(Settings.DropHotkey.Value) && Keyboard.IsKeyPressed(Keys.LShiftKey))
                         {
-                            //var inventory = _ingameState.IngameUi.InventoryPanel[InventoryIndex.PlayerInventory];
-                            if (GameController.Game.IngameState.UIRoot.Children?[1].Children?[74]?.IsVisible ?? false)
+                            if (Keyboard.IsKeyPressed(Keys.LShiftKey))
                             {
-                                DumpToOpenWindow(_ingameState.IngameUi.InventoryPanel[InventoryIndex.PlayerInventory], inventoryOpen);
+                                LogWarning($"{Keys.LShiftKey} key is toggled, disabling it.", 5);
+                                Keyboard.KeyPress(Keys.LShiftKey);
+                            }
+                            if ((GameController.Game.IngameState.UIRoot.Children?[1].Children?[74]?.IsVisible ?? false) || stashOpen())
+                            {
+                                DumpToOpenWindow(_ingameState.IngameUi.InventoryPanel[InventoryIndex.PlayerInventory],
+                                    () => { return inventoryOpen() || stashOpen(); });
                             }
                         }
                         else
@@ -1174,6 +1177,7 @@ namespace Stashie
                 {
                     return false;
                 }
+                Thread.Sleep(10);
             } while (!IsDone());
             return true;
         }
