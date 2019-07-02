@@ -38,7 +38,6 @@ namespace Stashie
         private Vector2 _windowOffset;
         private List<string> RefillCurrencyNames = new List<string>();
         private List<CustomFilter> _customFilters;
-        // Container for items that we either want to stash into specific tabs or simply drop into whatever window is open
         private List<FilterResult> _dropItems;
         private IngameState _ingameState;
         private bool _playerHasDropdownMenu;
@@ -313,6 +312,7 @@ namespace Stashie
 
             return null;
         }
+
         public void DumpToOpenWindow(Inventory inv, Func<bool> IsValidState)
         {
             //var inventory = _ingameState.IngameUi.InventoryPanel[InventoryIndex.PlayerInventory];
@@ -351,36 +351,6 @@ namespace Stashie
                 {
                     Keyboard.KeyUp(Keys.LControlKey);
                 }
-            }
-        }
-
-        private void DumpToWindow(Func<bool> validState)
-        {
-            var items = _dropItems.Select(filter => filter.ClickPos);
-            Keyboard.KeyDown(Keys.LControlKey);
-            try
-            {
-                Thread.Sleep(GetLatency(true) + Settings.ExtraDelay.Value);
-                foreach (var vec in items)
-                {
-                    try
-                    {
-                        Mouse.SetCursorPosAndLeftClick(vec, Settings.ExtraDelay, _windowOffset);
-                        Thread.Sleep(GetLatency(true) + Settings.ExtraDelay.Value);
-                    }
-                    catch (Exception e)
-                    {
-                        LogError($"{e}. Could not move the item {vec.ToString()}", 1);
-                    }
-                }
-            }
-            catch (Exception vectorize)
-            {
-                LogError($"{vectorize} Failed to project player inventory to Vector positions", 2);
-            }
-            finally
-            {
-                Keyboard.KeyUp(Keys.LControlKey);
             }
         }
 
