@@ -363,13 +363,18 @@ namespace Stashie
             {
                 if (_dropItems.Count > 0)
                 {
+                    var stashPanel = IngameState.IngameUi.StashElement;
                     // Dictionary where key is the index (stashtab index) and Value is the items to drop.
                     var itemsToDrop = (from dropItem in _dropItems
                                        group dropItem by dropItem.StashNode.VisibleIndex
                         into itemsToDropByTab
                                        select itemsToDropByTab).ToDictionary(tab => tab.Key, tab => tab.ToList());
+                    var sortedItems = itemsToDrop.OrderBy(x => x.Key);
+                    if (stashPanel.IndexVisibleStash >= sortedItems.Last().Key)
+                    {
+                        sortedItems = itemsToDrop.OrderByDescending(x => x.Key);
+                    }
 
-                    var stashPanel = IngameState.IngameUi.StashElement;
 
                     foreach (var stashResults in itemsToDrop)
                     {
