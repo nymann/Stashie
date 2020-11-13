@@ -49,7 +49,9 @@ namespace Stashie
         [Menu("Force arrow key switching", "Always switch stash tabs via keyboard arrows")]
         public ToggleNode AlwaysUseArrow { get; set; }
 
-
+        [Menu("Alternative refill", "For slow PC / vmware. Use with <allow have more> option")]
+        public ToggleNode AlternativeRefill { get; set; } = new ToggleNode(false);
+        
         public ToggleNode Enable { get; set; }
 
         public int[,] IgnoredCells { get; set; } =
