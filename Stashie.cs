@@ -874,6 +874,20 @@ namespace Stashie
                         var getCurCount = moveCount > stackSize ? stackSize : moveCount;
                         var destination = refill.ClickPos;
 
+                        if (Settings.AlternativeRefill)
+                        {
+                            LogMessage($"Alternative refill",5);
+                            Input.KeyDown(Keys.LControlKey);
+                            yield return new WaitTime(10 + Settings.ExtraDelay);
+                            Input.SetCursorPos(sourceOfRefill.GetClientRect().Center);
+                            yield return new WaitTime(10 + Settings.ExtraDelay);
+                            Input.Click(MouseButtons.Left);
+                            yield return new WaitTime(10 + Settings.ExtraDelay);
+                            Input.KeyUp(Keys.LControlKey);
+                            yield return new WaitTime(10 + Settings.ExtraDelay);
+                            continue;
+                        }
+                        
                         if (refill.OwnedCount == 0)
                         {
                             destination = GetInventoryClickPosByCellIndex(inventory, refill.InventPos.X,
@@ -889,20 +903,6 @@ namespace Stashie
                                     5);
                                 continue;
                             }
-                        }
-                        
-                        if (Settings.AlternativeRefill)
-                        {
-                            LogMessage($"Alternative refill",5);
-                            Input.KeyDown(Keys.LControlKey);
-                            yield return new WaitTime(10 + Settings.ExtraDelay);
-                            Input.SetCursorPos(sourceOfRefill.GetClientRect().Center);
-                            yield return new WaitTime(10 + Settings.ExtraDelay);
-                            Input.Click(MouseButtons.Left);
-                            yield return new WaitTime(10 + Settings.ExtraDelay);
-                            Input.KeyUp(Keys.LControlKey);
-                            yield return new WaitTime(10 + Settings.ExtraDelay);
-                            continue;
                         }
                         
                         yield return SplitStack(moveCount, sourceOfRefill.GetClientRect().Center, destination);
